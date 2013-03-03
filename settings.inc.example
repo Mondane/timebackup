@@ -1,0 +1,10 @@
+# settings
+# multiple sources can be placed in backup
+# target must end in /
+backup='"/media/Data/Pictures"
+"/media/Data/Documents"
+"/home/johndoe/.settings"'
+target='/mnt/dev1/backup/'
+ssh_user='JohnDoe'
+ssh_server='BackupStorage'
+ssh_port='22'

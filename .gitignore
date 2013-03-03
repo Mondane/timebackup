@@ -1,0 +1,6 @@
+.bzr
+.bzrignore
+backup.log
+*.lck
+settings.inc
+exclude-list.txt
