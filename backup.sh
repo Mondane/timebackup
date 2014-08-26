@@ -282,7 +282,7 @@ handle_message 'Backups rotated, deleting old backups.'
 # To determine when to delete a backup from ie hourly it must be older then
 # the given amount of days. Note, because of this deletion, the rotation is
 # done before it.
-delete0='0' # Hourly backups older then 1 day are removed.
+delete0='1' # Hourly backups older then 1 day are removed.
 delete1='7' # Daily backups older then 7 days are removed.
 delete2='30' # Weekly backups older then 30 days (approx. 1 month) are removed.
 delete3='365' # Monthly backups older then 365 days (approx. 1 year) are removed.
