@@ -1,14 +1,17 @@
 #!/bin/sh
-# Version: 20 februari 2013
+# Version: 30 August 2014
 # exit codes are taken from /usr/include/sysexits.h
 export DISPLAY=:0
 
 script=$(/bin/readlink -f "${0}")
 script_dir=$(/usr/bin/dirname "${script}")
 
+# Date for this backup.
+date=`date '+%Y-%m-%d_%Hh%Mm%Ss'`
+
 # include settings
 . "${script_dir}/settings.inc"
-logfile="${script_dir}/backup.log"
+logfile="${script_dir}/log/backup-${date}.log"
 
 # function display a message if -v is given as argument
 handle_message()
@@ -70,9 +73,6 @@ fi
 
 handle_message '-- Backup script started' 'Backup script started'
 handle_message "Command line: ${0} ${*}"
-
-# Date for this backup.
-date=`date '+%Y-%m-%d_%Hh%Mm%Ss'`
 
 # backups are placed in a subfolder name $identifier, the identifier is also used as a lockfile
 identifier=`/bin/hostname`
@@ -176,20 +176,33 @@ handle_message "Rotation folders exists, starting backup to '${target}${date}-in
 # Make the actual backup, note: the first time this is run, the latest folder
 # can't be found. rsync will display this but will proceed.
 verbosity='quiet'
+log_to_file=''
 if [ ${verbose} = 1 ]
 then
   verbosity='verbose'
+  log_to_file='--log-file=${logfile} --stats'
+fi
+
+# If the previous run was interrupted, try to link against its files first
+link_incomplete=''
+latest_incomplete=`${ssh_executable} -f -p ${ssh_port} ${ssh_connect} "find ${target} -maxdepth 1 -name \"*-incomplete\" -type d | sort -nr | head -1"`
+if ${ssh_executable} -p ${ssh_port} ${ssh_connect} "[ ! -z ${latest_incomplete} ] && [ -d ${latest_incomplete} ]"
+then
+  handle_message "Incomplete folder exists from previous backup attempt. Continuing backup from that attempt."
+  link_incomplete="--link-dest=${latest_incomplete}"
 fi
 
 # Option --xattrs temporarily removed, Synology Diskstation does not support it.
 command="${rsync_executable} \
 --${verbosity} \
+${log_to_file} \
 --progress \
 --rsh='${ssh_executable} -p ${ssh_port}' \
 --archive \
 --compress \
 --human-readable \
 --delete \
+${link_incomplete} \
 --link-dest='${target}latest' \
 --exclude-from='${script_dir}/exclude-list.txt' \
 ${backup} \
@@ -232,7 +245,7 @@ if [ $? = 0 ]
 then
   handle_message 'Modification moment set, rotating backups.'
 else
-  handle_error "Error while setting modifitcation moment."
+  handle_error "Error while setting modification moment."
   exit 74 # input/output error
 fi
 
