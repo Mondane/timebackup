@@ -46,6 +46,12 @@ executable='/usr/bin/notify-send'
   fi
 }
 
+# Create log directory if it doesn't exist
+if [ ! -d '${script_dir}/log' ]
+then
+  mkdir ${script_dir}/log
+fi
+
 # Make sure the system wide version of each executable used.
 ssh_executable='/usr/bin/ssh'
 rsync_executable='/usr/bin/rsync'
