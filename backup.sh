@@ -11,7 +11,40 @@ date=`date '+%Y-%m-%d_%Hh%Mm%Ss'`
 
 # include settings
 . "${script_dir}/settings.inc"
-logfile="${script_dir}/log/backup-${date}.log"
+
+# Set logfile path.
+# If the single_logfile setting is false, use a log file per backup.
+# Otherwise, use a single log file for all backups.
+if [ "${single_logfile}" == 'false' ]
+then
+  logdir="${script_dir}/log"
+  
+  # Create log directory if it doesn't exist.
+    if [ ! -d "${logdir}" ]
+    then
+      mkdir ${logdir}
+      mkdir ${logdir}/error
+    fi
+  
+  logfile="${logdir}/backup-${date}.log"
+else
+  logdir="${script_dir}"
+  logfile="${logdir}/backup.log"
+fi
+
+# Function moves log file to error folder if multiple log files are used,
+# then exits with error code.
+move_log_exit()
+{
+  # If multiple log files are being used, move the current log file to the 
+  # error folder.
+  if [ "${single_logfile}" == 'false' ]
+  then
+    mv "${logfile}" "${logdir}/error/"
+  fi
+  
+  exit ${1}
+}
 
 # function display a message if -v is given as argument
 handle_message()
@@ -45,12 +78,6 @@ executable='/usr/bin/notify-send'
     ${executable} -i "${script_dir}/backup-ambiance_44x44.png" "${1}" "${2}"
   fi
 }
-
-# Create log directory if it doesn't exist
-if [ ! -d '${script_dir}/log' ]
-then
-  mkdir ${script_dir}/log
-fi
 
 # Make sure the system wide version of each executable used.
 ssh_executable='/usr/bin/ssh'
@@ -96,7 +123,7 @@ then
     handle_message "Lockfile for ghost process (PID: ${lockpid}) found, continuing backup."
   else
     handle_message "-- Lockfile '${lockfile}' for running process (PID: ${lockpid}) found, backup script stopped."  'Backup script stopped'
-    exit 73 # can't create (user) output file
+    move_log_exit 73 # can't create (user) output file
   fi
 fi
 
@@ -116,7 +143,7 @@ ${ssh_executable} -q -o 'BatchMode=yes' -o 'ConnectTimeout 10' -p ${ssh_port} ${
 if [ $? != 0 ]
 then
   handle_error "SSH connection to '${ssh_connect}' failed."
-  exit 69 # service unavailable
+  move_log_exit 69 # service unavailable
 fi
 
 handle_message "SSH connection is ok, checking if target '${target}' exists."
@@ -125,7 +152,7 @@ handle_message "SSH connection is ok, checking if target '${target}' exists."
 if ${ssh_executable} -p ${ssh_port} ${ssh_connect} "[ ! -d '${target}' ]"
 then
   handle_error "Target '${target}' does not exist, backup stopped."
-  exit 66 # cannot open input
+  move_log_exit 66 # cannot open input
 fi
 
 # Get the identifier and append it to target, create a folder for the identifier if it doesn't exist.
@@ -141,7 +168,7 @@ then
     handle_message "Created target '${target}'."
   else
     handle_error "Couldn't create target '${target}'."
-    exit 73 # can't create (user) output file
+    move_log_exit 73 # can't create (user) output file
   fi
 fi
 
@@ -169,7 +196,7 @@ do
       handle_message "Created rotation folder '${folder}'."
     else
       handle_error "Couldn't create rotation folder '${folder}'."
-      exit 73 # can't create (user) output file
+      move_log_exit 73 # can't create (user) output file
     fi
   fi
 
@@ -186,15 +213,26 @@ log_to_file=''
 if [ ${verbose} = 1 ]
 then
   verbosity='verbose'
+  
+  # Log RSync output to the log file to diagnose RSync errors during automated
+  # back up jobs.
   log_to_file='--log-file=${logfile} --stats'
 fi
 
-# If the previous run was interrupted, try to link against its files first
+# If the previous backup was interrupted, try to link against its files first.
 link_incomplete=''
+
+# Try to find the most recent incomplete folder on the target.
 latest_incomplete=`${ssh_executable} -f -p ${ssh_port} ${ssh_connect} "find ${target} -maxdepth 1 -name \"*-incomplete\" -type d | sort -nr | head -1"`
-if ${ssh_executable} -p ${ssh_port} ${ssh_connect} "[ ! -z ${latest_incomplete} ] && [ -d ${latest_incomplete} ]"
+
+# If an incomplete folder exists on the target, try to link against its files.
+if ${ssh_executable} -p ${ssh_port} ${ssh_connect} "[ ! -z ${latest_incomplete} ]"
 then
   handle_message "Incomplete folder exists from previous backup attempt. Continuing backup from that attempt."
+  
+  # RSync will try first to link against files in this location when searching
+  # for matches during backup. If it does not find the file here, it will then
+  # try to link against files in the latest complete backup folder.
   link_incomplete="--link-dest=${latest_incomplete}"
 fi
 
@@ -221,7 +259,7 @@ then
   handle_message "Backup complete, moving to hourly rotation folder as '${target}hourly/${date}'."
 else
   handle_error 'Error while running the backup.'
-  exit 70 # internal software error
+  move_log_exit 70 # internal software error
 fi
 
 # Backup complete, it will be moved to the hourly folder.
@@ -231,7 +269,7 @@ then
   handle_message "Moved backup, updating 'latest' symlink."
 else
   handle_error "Error while moving the backup."
-  exit 74 # input/output error
+  move_log_exit 74 # input/output error
 fi
 
 # Create a symlink to new backup .
@@ -241,7 +279,7 @@ then
   handle_message 'Symlink updated, setting modification moment for backup to now.'
 else
   handle_error "Error while updating the symlink."
-  exit 74 # input/output error
+  move_log_exit 74 # input/output error
 fi
 
 # Set the modification moment to now for the new backup, this way, when rotating,
@@ -252,7 +290,7 @@ then
   handle_message 'Modification moment set, rotating backups.'
 else
   handle_error "Error while setting modification moment."
-  exit 74 # input/output error
+  move_log_exit 74 # input/output error
 fi
 
 # -- rotate backups
@@ -290,7 +328,7 @@ do
   if [ $? != 0 ]
   then
     handle_error "Error while rotating backups."
-    exit 74 # input/output error
+    move_log_exit 74 # input/output error
   fi
 
 done
@@ -320,7 +358,7 @@ do
   if [ $? != 0 ]
   then
     handle_error "Error while deleting old backups."
-    exit 74 # input/output error
+    move_log_exit 74 # input/output error
   fi
 
   index=`expr ${index} + 1`
@@ -336,7 +374,7 @@ then
   handle_message "Finished deleting any remaining incomplete folders, deleting lockfile '${lockfile}'."
 else
   handle_error "Error while deleting any remaining incomplete folders."
-  exit 74 # input/output error
+  move_log_exit 74 # input/output error
 fi
 
 # Remove lockfile
@@ -347,10 +385,20 @@ then
   handle_message 'Lockfile is deleted.'
 else
   handle_error "Error while deleting the lockfile."
-  exit 74 # input/output error
+  move_log_exit 74 # input/output error
 fi
 
 handle_message "-- Backup to '${target}hourly/${date}' finished" 'Backup script finished'
+
+# Delete old log files if in multiple log file mode.
+if [ "${single_logfile}" == 'false' ]
+then
+  # Delete successful log files older than a week.
+  find ${logdir} -maxdepth 1 -type f -mtime +7 | xargs rm -f
+  
+  # Delete error log files older than a month.
+  find ${logdir}/error -maxdepth 1 -type f -mtime +30 | xargs rm -f
+fi
 
 exit 0; # successful termination
 
