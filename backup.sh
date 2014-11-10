@@ -9,6 +9,10 @@ script_dir=$(/usr/bin/dirname "${script}")
 # Date for this backup.
 date=`date '+%Y-%m-%d_%Hh%Mm%Ss'`
 
+# Set default intervals for deleting multiple log files, in days.
+delete_logfile_interval=7
+delete_error_logfile_interval=30
+
 # include settings
 . "${script_dir}/settings.inc"
 
@@ -394,10 +398,10 @@ handle_message "-- Backup to '${target}hourly/${date}' finished" 'Backup script 
 if [ "${single_logfile}" == 'false' ]
 then
   # Delete successful log files older than a week.
-  find ${logdir} -maxdepth 1 -type f -mtime +7 | xargs rm -f
+  find ${logdir} -maxdepth 1 -type f -mtime +${delete_logfile_interval} | xargs rm -f
   
   # Delete error log files older than a month.
-  find ${logdir}/error -maxdepth 1 -type f -mtime +30 | xargs rm -f
+  find ${logdir}/error -maxdepth 1 -type f -mtime +${delete_error_logfile_interval} | xargs rm -f
 fi
 
 exit 0; # successful termination
