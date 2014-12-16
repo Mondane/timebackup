@@ -371,7 +371,7 @@ done
 handle_message 'Old backups deleted, deleting any remaining incomplete folders.'
 
 # Remove any remaining incomplete folders at target, those belong to ghost processes.
-${ssh_executable} -p ${ssh_port} ${ssh_connect} "find '${target}' -type d -maxdepth 1 -name '*incomplete' -exec rm -rf {} \;"
+${ssh_executable} -p ${ssh_port} ${ssh_connect} "find '${target}' -type d -maxdepth 1 -name '*incomplete' -exec rm -rf {} +"
 
 if [ $? = 0 ]
 then
