@@ -1,6 +1,8 @@
 .bzr
 .bzrignore
 backup.log
+log
 *.lck
+*.*~
 settings.inc
 exclude-list.txt

@@ -5,6 +5,9 @@ backup='"/media/Data/Pictures"
 "/media/Data/Documents"
 "/home/johndoe/.settings"'
 target='/mnt/dev1/backup/'
+single_logfile='true'
 ssh_user='JohnDoe'
 ssh_server='BackupStorage'
 ssh_port='22'
+# If the identifier is empty, the current hostname will be used. Backups are placed in this subfolder.
+identifier=''
