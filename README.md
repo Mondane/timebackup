@@ -15,4 +15,6 @@ Since the script is meant to be run in a cron, there must be a SSH key generated
 
 You can see if the script is running, when you start the backup-indicator.py. This indicator uses the Ubuntu Unity app indicator functions. Should you be running Cygwin, install AutoHotKey and run backup-indicator.ahk.
 
-NB Install the Python module appindicator for the backup indicator and make sure you start the indicator while logging in.
+NB Install the Python module gtk and appindicator for the backup indicator and make sure you start the indicator while logging in.
+
+```sudo apt-get install python-gtk2 python-appindicator```
