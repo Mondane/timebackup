@@ -306,7 +306,7 @@ fi
 # be checked to see if there is a backup present up until the amount of days
 # ago. If there isn't, and the former folder has more then 1 backup, the oldest
 # is moved to the latter folder.
-rotate1='2' # Rotate the oldest hourly if there is no daily in the last 2 days
+rotate1='1' # Rotate the oldest hourly if there is no daily in the last day
 rotate2='14' # Rotate the oldest daily if there is no weekly in the last 14 days
 rotate3='60' # Rotate the oldest weekly if there is no monthly in the last 60 days (approx. 2 months)
 rotate4='730' # Rotate the oldest monthly if there is no yearly in the last 730 days (approx. 2 years)
@@ -327,7 +327,7 @@ do
   # The -name '20*' is there to limit the files which can be found to everything
   # starting with 20*. This means the script only works for the years 2000-2099 but
   # this should be enough :).
-  if [ `${ssh_executable} -p ${ssh_port} ${ssh_connect} "find '${from}' -maxdepth 1 -name '20*' | wc -l"` -gt 1 ] && [ `${ssh_executable} -p ${ssh_port} ${ssh_connect} "find '${to}' -maxdepth 1 -type d -mtime -${days} -name '20*' | wc -l"` -eq 0 ]
+  if [ `${ssh_executable} -p ${ssh_port} ${ssh_connect} "find '${from}' -maxdepth 1 -name '20*' | wc -l"` -gt 1 ] && [ `${ssh_executable} -p ${ssh_port} ${ssh_connect} "find '${to}' -maxdepth 1 -type d -mmin -$((60*24*${days})) -name '20*' | wc -l"` -eq 0 ]
   then
     oldest=`${ssh_executable} -p ${ssh_port} ${ssh_connect} "ls -1 -tr '${from}' | head -1"`
     ${ssh_executable} -p ${ssh_port} ${ssh_connect} "mv '${from}/$oldest' '${to}'"
@@ -361,7 +361,7 @@ do
   eval from="\${target}\${folders${index}}"
   eval days="\${delete${index}}"
 
-  ${ssh_executable} -p ${ssh_port} ${ssh_connect} "find '${from}' -maxdepth 1 -type d -mtime +${days} | xargs rm -rf"
+  ${ssh_executable} -p ${ssh_port} ${ssh_connect} "find '${from}' -maxdepth 1 -type d -mmin +$((60*24*${days})) | xargs rm -rf"
 
   if [ $? != 0 ]
   then
@@ -404,10 +404,10 @@ then
   handle_message "Multiple log file mode; clean up logs in '${logdir}'."
 
   # Delete successful log files older than a week.
-  find "${logdir}" -maxdepth 1 -type f -mtime +${delete_logfile_interval} | xargs rm -f
+  find "${logdir}" -maxdepth 1 -type f -mmin +$((60*24*${delete_logfile_interval})) | xargs rm -f
 
   # Delete error log files older than a month.
-  find "${logdir}/error" -maxdepth 1 -type f -mtime +${delete_error_logfile_interval} | xargs rm -f
+  find "${logdir}/error" -maxdepth 1 -type f -mmin +$((60*24*${delete_error_logfile_interval})) | xargs rm -f
 fi
 
 handle_message "-- Backup to '${target}hourly/${date}' finished; backup script finished"
