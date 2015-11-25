@@ -9,8 +9,34 @@ import sys
 
 script_dir = os.path.dirname(os.path.realpath(__file__))
 
-# backups are placed in a subfolder name $identifier, the identifier is also used as a lockfile
-identifier = socket.gethostname()
+# Backups are placed in a subfolder name $identifier, the identifier is also used for the lockfile.
+# Load the settings to determine the identifier.
+settingsfile='{script_dir}/settings.inc'.format(  **locals())
+
+import ConfigParser
+# FakeSecHead taken from http://stackoverflow.com/a/2819788
+class FakeSecHead(object):
+    def __init__(self, fp):
+        self.fp = fp
+        self.sechead = '[settings]\n'
+
+    def readline(self):
+        if self.sechead:
+            try: 
+                return self.sechead
+            finally: 
+                self.sechead = None
+        else: 
+            return self.fp.readline()
+
+cp = ConfigParser.SafeConfigParser()
+cp.readfp(FakeSecHead(open(settingsfile)))
+
+# Using eval to get rid of quotes, see http://stackoverflow.com/a/33730075
+if (len(eval(cp.get('settings', 'identifier'))) > 0):
+   identifier = eval(cp.get('settings', 'identifier'))
+else:
+   identifier = socket.gethostname()
 
 # Check and create lockfile, the identifier is used as a name for the lockfile
 lockfile='{script_dir}/{identifier}.lck'.format(  **locals())

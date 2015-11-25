@@ -5,4 +5,5 @@ log
 *.lck
 *.*~
 settings.inc
+settings.pyc
 exclude-list.txt
