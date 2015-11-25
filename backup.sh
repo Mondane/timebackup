@@ -306,7 +306,7 @@ fi
 # be checked to see if there is a backup present up until the amount of days
 # ago. If there isn't, and the former folder has more then 1 backup, the oldest
 # is moved to the latter folder.
-rotate1='1' # Rotate the oldest hourly if there is no daily in the last day
+rotate1='2' # Rotate the oldest hourly if there is no daily in the last two days
 rotate2='14' # Rotate the oldest daily if there is no weekly in the last 14 days
 rotate3='60' # Rotate the oldest weekly if there is no monthly in the last 60 days (approx. 2 months)
 rotate4='730' # Rotate the oldest monthly if there is no yearly in the last 730 days (approx. 2 years)
