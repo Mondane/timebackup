@@ -146,18 +146,20 @@ ssh_connect="${ssh_user}@${ssh_server}"
 handle_message "Testing SSH connection to '${ssh_connect}'."
 
 # Check if the ${ssh_executable} connection can be made, a ${ssh_executable} keypair without keyphrase must exist.
-${ssh_executable} -q -o 'BatchMode=yes' -o 'ConnectTimeout 10' -p ${ssh_port} ${ssh_connect} exit > /dev/null
-
-if [ $? != 0 ]
+# NB Errors will show up in the log when running without verbose due to not using the -q option.
+${ssh_executable} -o 'BatchMode=yes' -o 'ConnectTimeout 10' -p ${ssh_port} -i ${ssh_key} ${ssh_connect} exit
+ec=$?
+echo ""
+if [ ${ec} != 0 ]
 then
-  handle_error "SSH connection to '${ssh_connect}' failed."
+  handle_error "Error code '${ec}' while testing SSH connection to '${ssh_connect}'."
   move_log_exit 69 # service unavailable
 fi
 
 handle_message "SSH connection is ok, checking if target '${target}' exists."
 
 # check if target exists
-if ${ssh_executable} -p ${ssh_port} ${ssh_connect} "[ ! -d '${target}' ]"
+if ${ssh_executable} -p ${ssh_port} -i ${ssh_key} ${ssh_connect} "[ ! -d '${target}' ]"
 then
   handle_error "Target '${target}' does not exist, backup stopped."
   move_log_exit 66 # cannot open input
@@ -168,14 +170,15 @@ target="${target}${identifier}/"
 
 handle_message "Target exists, checking if target '${target}' exists."
 
-if ${ssh_executable} -p ${ssh_port} ${ssh_connect} "[ ! -d '${target}' ]"
+if ${ssh_executable} -p ${ssh_port} -i ${ssh_key} ${ssh_connect} "[ ! -d '${target}' ]"
 then
-  ${ssh_executable} -p ${ssh_port} ${ssh_connect} "mkdir '${target}'"
-  if [ $? = 0 ]
+  ${ssh_executable} -p ${ssh_port} -i ${ssh_key} ${ssh_connect} "mkdir '${target}'"
+  ec=$?
+  if [ ${ec} = 0 ]
   then
     handle_message "Created target '${target}'."
   else
-    handle_error "Couldn't create target '${target}'."
+    handle_error "Error code '${ec}' while creating target '${target}'."
     move_log_exit 73 # can't create (user) output file
   fi
 fi
@@ -196,14 +199,15 @@ while [ ${index} -lt ${max_index} ]
 do
   eval folder="\${target}\${folders${index}}"
 
-  if ${ssh_executable} -p ${ssh_port} ${ssh_connect} "[ ! -d '${folder}' ]"
+  if ${ssh_executable} -p ${ssh_port} -i ${ssh_key} ${ssh_connect} "[ ! -d '${folder}' ]"
   then
-    ${ssh_executable} -p ${ssh_port} ${ssh_connect} "mkdir '${folder}'"
-    if [ $? = 0 ]
+    ${ssh_executable} -p ${ssh_port} -i ${ssh_key} ${ssh_connect} "mkdir '${folder}'"
+    ec=$?
+    if [ ${ec} = 0 ]
     then
       handle_message "Created rotation folder '${folder}'."
     else
-      handle_error "Couldn't create rotation folder '${folder}'."
+      handle_error "Error code '${ec}' while creating rotation folder '${folder}'."
       move_log_exit 73 # can't create (user) output file
     fi
   fi
@@ -231,10 +235,10 @@ fi
 link_incomplete=''
 
 # Try to find the most recent incomplete folder on the target.
-latest_incomplete=`${ssh_executable} -f -p ${ssh_port} ${ssh_connect} "find ${target} -maxdepth 1 -name \"*-incomplete\" -type d | sort -nr | head -1"`
+latest_incomplete=`${ssh_executable} -f -p ${ssh_port} -i ${ssh_key} ${ssh_connect} "find ${target} -maxdepth 1 -name \"*-incomplete\" -type d | sort -nr | head -1"`
 
 # If an incomplete folder exists on the target, try to link against its files.
-if ${ssh_executable} -p ${ssh_port} ${ssh_connect} "[ ! -z ${latest_incomplete} ]"
+if ${ssh_executable} -p ${ssh_port} -i ${ssh_key} ${ssh_connect} "[ ! -z ${latest_incomplete} ]"
 then
   handle_message "Incomplete folder exists from previous backup attempt. Continuing backup from that attempt."
 
@@ -249,7 +253,7 @@ command="${rsync_executable} \
 --${verbosity} \
 ${log_to_file} \
 --progress \
---rsh='${ssh_executable} -p ${ssh_port}' \
+--rsh='${ssh_executable} -p ${ssh_port} -i ${ssh_key}' \
 --archive \
 --compress \
 --human-readable \
@@ -261,43 +265,46 @@ ${backup} \
 '${ssh_connect}:${target}${date}-incomplete'"
 
 eval ${command}
-
-if [ $? = 0 ]
+ec=$?
+if [ ${ec} = 0 ]
 then
   handle_message "Backup complete, moving to hourly rotation folder as '${target}hourly/${date}'."
 else
-  handle_error 'Error while running the backup.'
+  handle_error 'Error code '${ec}' while running the backup.'
   move_log_exit 70 # internal software error
 fi
 
 # Backup complete, it will be moved to the hourly folder.
-${ssh_executable} -p ${ssh_port} ${ssh_connect} "mv '${target}${date}-incomplete' '${target}hourly/${date}'"
-if [ $? = 0 ]
+${ssh_executable} -p ${ssh_port} -i ${ssh_key} ${ssh_connect} "mv '${target}${date}-incomplete' '${target}hourly/${date}'"
+ec=$?
+if [ ${ec} = 0 ]
 then
   handle_message "Moved backup, updating 'latest' symlink."
 else
-  handle_error "Error while moving the backup."
+  handle_error "Error code '${ec}' while moving the backup."
   move_log_exit 74 # input/output error
 fi
 
 # Create a symlink to new backup .
-${ssh_executable} -p ${ssh_port} ${ssh_connect} "rm -f '${target}latest' && ln -s '${target}hourly/${date}' '${target}latest'"
-if [ $? = 0 ]
+${ssh_executable} -p ${ssh_port} -i ${ssh_key} ${ssh_connect} "rm -f '${target}latest' && ln -s '${target}hourly/${date}' '${target}latest'"
+ec=$?
+if [ ${ec} = 0 ]
 then
   handle_message 'Symlink updated, setting modification moment for backup to now.'
 else
-  handle_error "Error while updating the symlink."
+  handle_error "Error code '${ec}' while updating the symlink."
   move_log_exit 74 # input/output error
 fi
 
 # Set the modification moment to now for the new backup, this way, when rotating,
 # the time when a backup was finished is used.
-${ssh_executable} -p ${ssh_port} ${ssh_connect} "touch '${target}hourly/${date}'"
-if [ $? = 0 ]
+${ssh_executable} -p ${ssh_port} -i ${ssh_key} ${ssh_connect} "touch '${target}hourly/${date}'"
+ec=$?
+if [ ${ec} = 0 ]
 then
   handle_message 'Modification moment set, rotating backups.'
 else
-  handle_error "Error while setting modification moment."
+  handle_error "Error code '${ec}' while setting modification moment."
   move_log_exit 74 # input/output error
 fi
 
@@ -327,15 +334,15 @@ do
   # The -name '20*' is there to limit the files which can be found to everything
   # starting with 20*. This means the script only works for the years 2000-2099 but
   # this should be enough :).
-  if [ `${ssh_executable} -p ${ssh_port} ${ssh_connect} "find '${from}' -maxdepth 1 -name '20*' | wc -l"` -gt 1 ] && [ `${ssh_executable} -p ${ssh_port} ${ssh_connect} "find '${to}' -maxdepth 1 -type d -mmin -$((60*24*${days})) -name '20*' | wc -l"` -eq 0 ]
+  if [ `${ssh_executable} -p ${ssh_port} -i ${ssh_key} ${ssh_connect} "find '${from}' -maxdepth 1 -name '20*' | wc -l"` -gt 1 ] && [ `${ssh_executable} -p ${ssh_port} -i ${ssh_key} ${ssh_connect} "find '${to}' -maxdepth 1 -type d -mmin -$((60*24*${days})) -name '20*' | wc -l"` -eq 0 ]
   then
-    oldest=`${ssh_executable} -p ${ssh_port} ${ssh_connect} "ls -1 -tr '${from}' | head -1"`
-    ${ssh_executable} -p ${ssh_port} ${ssh_connect} "mv '${from}/$oldest' '${to}'"
+    oldest=`${ssh_executable} -p ${ssh_port} -i ${ssh_key} ${ssh_connect} "ls -1 -tr '${from}' | head -1"`
+    ${ssh_executable} -p ${ssh_port} -i ${ssh_key} ${ssh_connect} "mv '${from}/$oldest' '${to}'"
   fi
-
-  if [ $? != 0 ]
+  ec=$?
+  if [ ${ec} != 0 ]
   then
-    handle_error "Error while rotating backups."
+    handle_error "Error code '${ec}' while rotating backups."
     move_log_exit 74 # input/output error
   fi
 
@@ -361,11 +368,11 @@ do
   eval from="\${target}\${folders${index}}"
   eval days="\${delete${index}}"
 
-  ${ssh_executable} -p ${ssh_port} ${ssh_connect} "find '${from}' -maxdepth 1 -type d -mmin +$((60*24*${days})) | xargs rm -rf"
-
-  if [ $? != 0 ]
+  ${ssh_executable} -p ${ssh_port} -i ${ssh_key} ${ssh_connect} "find '${from}' -maxdepth 1 -type d -mmin +$((60*24*${days})) | xargs rm -rf"
+  ec=$?
+  if [ ${ec} != 0 ]
   then
-    handle_error "Error while deleting old backups."
+    handle_error "Error code '${ec}' while deleting old backups."
     move_log_exit 74 # input/output error
   fi
 
@@ -377,24 +384,24 @@ handle_message 'Old backups deleted, deleting any remaining incomplete folders.'
 # Remove any remaining incomplete folders at target, those belong to ghost processes.
 # NB Replacing '{} \;' with '{} +' would be faster but it isn't set like that so
 #    the script is compatible with Synology Diskstation
-${ssh_executable} -p ${ssh_port} ${ssh_connect} "find '${target}' -type d -maxdepth 1 -name '*incomplete' -exec rm -rf {} \;"
-
-if [ $? = 0 ]
+${ssh_executable} -p ${ssh_port} -i ${ssh_key} ${ssh_connect} "find '${target}' -type d -maxdepth 1 -name '*incomplete' -exec rm -rf {} \;"
+ec=$?
+if [ ${ec} = 0 ]
 then
   handle_message "Finished deleting any remaining incomplete folders, deleting lockfile '${lockfile}'."
 else
-  handle_error "Error while deleting any remaining incomplete folders."
+  handle_error "Error code '${ec}' while deleting any remaining incomplete folders."
   move_log_exit 74 # input/output error
 fi
 
 # Remove lockfile
 rm -f "${lockfile}"
-
-if [ $? = 0 ]
+ec=$?
+if [ ${ec} = 0 ]
 then
   handle_message 'Lockfile is deleted.'
 else
-  handle_error "Error while deleting the lockfile."
+  handle_error "Error code '${ec}' while deleting the lockfile."
   move_log_exit 74 # input/output error
 fi
 
